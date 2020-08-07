@@ -36,12 +36,23 @@ def contact():
 
 @app.route('/articles')
 def articles():
-    return render_template('articles.html', articles=Articles)
+    cur = mysql.connection.cursor()
+    result = cur.execute("SELECT * FROM articles")
+    articles = cur.fetchall()
+    if result > 0:
+        return render_template("articles.html", articles=articles)
+    else:
+        msg = 'No Articles found'
+        return redirect(url_for('dashboard'), msg=msg)
+    cur.close()
 
 
 @app.route('/article/<string:id>/')
-def article(_id):
-    return render_template('article.html', id=_id)
+def article(id):
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT * FROM articles WHERE id=%s", [id])
+    article = cur.fetchone()
+    return render_template('article.html', article=article)
 
 
 class RegisterForm(Form):
@@ -129,7 +140,48 @@ def logout():
 @app.route('/dashboard')
 @is_logged_in
 def dashboard():
+    # Create Cursor
+    cur = mysql.connection.cursor()
+
+    # Excute
+    result = cur.execute("SELECT * FROM articles")
+    articles = cur.fetchall()
+    if result > 0:
+        return render_template('dashboard.html', articles=articles)
+    else:
+        msg = 'No Articles found'
+        return render_template('dashboard.html', msg=msg)
     return render_template('dashboard.html')
+
+
+class ArticleForm(Form):
+    title = StringField('Title', validators=[validators.Length(min=1, max=200)])
+    body = TextAreaField('Body', validators=[validators.Length(min=30)])
+
+
+@app.route('/add_article', methods=['GET', 'POST'])
+@is_logged_in
+def add_article():
+    form = ArticleForm(request.form)
+    if request.method == 'POST':
+        title = form.title.data
+        body = form.body.data
+
+        # Create Cursor
+        cur = mysql.connection.cursor()
+
+        # Excute
+        cur.execute("INSERT INTO articles(title, body, author) VALUES(%s, %s, %s)", (title, body, session['username']))
+
+        # Commit to DB
+        mysql.connection.commit()
+
+        # Close connection
+        cur.close()
+        flash('Article Created', 'success')
+        return redirect(url_for('dashboard'))
+
+    return render_template('add_article.html', form=form)
 
 
 if __name__ == '__main__':
